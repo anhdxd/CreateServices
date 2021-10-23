@@ -6,16 +6,20 @@
 
 #define SVCNAME "AbSvcAnhdz"
 #define LOGFILE "C:\\Users\\Vanh\\Desktop\\TestService\\memstatus.log"
-
+#define NAMEPIPES "\\\\.\\pipe\\testpipesVA"
+#define BUFSIZE 512
 
 void InstallSvc(); // Cài Services
-void MainService(); // Hàm services chính
+void WINAPI MainService(); // Hàm services chính
 int WriteToLog(char* str);
-void SvcCtrlHandler(DWORD dwCtrl); // Hàm xử lý request do control dispath gửi về từ SCM
+void WINAPI SvcCtrlHandler(DWORD dwCtrl); // Hàm xử lý request do control dispath gửi về từ SCM
+bool WriteToPipes(HANDLE hPipe, char* WriteBuff);
+int SendRecvPipes(HANDLE hPipe);
 
 HANDLE ghSvcStopEvent;
 SERVICE_STATUS g_SvcStatus;
 SERVICE_STATUS_HANDLE g_hSvcStatus;
+
 
 int main()
 {
@@ -72,8 +76,11 @@ void InstallSvc()
     CloseServiceHandle(schService);
     return;
 }
-void MainService() // Hàm này sẽ được chạy trong 1 Thread khác
+void WINAPI MainService() // Hàm này sẽ được chạy trong 1 Thread khác
 {
+    //**********************KHỞI TẠO **********************************
+    char Err[512] = { 0 };
+    BOOL bClientConnect = FALSE;
     ghSvcStopEvent = CreateEvent(
         NULL,    // default security attributes
         TRUE,    // manual reset event
@@ -91,23 +98,41 @@ void MainService() // Hàm này sẽ được chạy trong 1 Thread khác
     // Chuyen thanh Running
     g_SvcStatus.dwCurrentState = SERVICE_RUNNING;
     SetServiceStatus(hSvcStatus, &g_SvcStatus);
-    //
+
+    //**************************** CODE *************************************
+    // Create Pipes
     while (g_SvcStatus.dwCurrentState == SERVICE_RUNNING)
     {
-        int result = WriteToLog((char*)"Deo gi y dcm");
-        if (g_SvcStatus.dwCurrentState == SERVICE_STOPPED)
+        HANDLE hPipe = CreateNamedPipe(
+            NAMEPIPES,             // pipe name 
+            PIPE_ACCESS_DUPLEX,       // read/write access 
+            PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,       // message type pipe  |   // message-read mode // blocking mode 
+            PIPE_UNLIMITED_INSTANCES, // max. instances  
+            BUFSIZE,                  // output buffer size 
+            BUFSIZE,                  // input buffer size 
+            0,                        // client time-out 
+            NULL);                    // default security attribute 
+        if (hPipe == INVALID_HANDLE_VALUE)
+        {
+            sprintf(Err, "hPipe Error: %d", GetLastError());
+            WriteToLog(Err);
             return;
-        Sleep(1000);
-        
+        }
+        // Đợi Client kết nối, nếu ko thành công trả về error
+        bClientConnect = ConnectNamedPipe(hPipe, 0) ? TRUE : (GetLastError() == ERROR_PIPE_CONNECTED);
+        if (bClientConnect)
+        {
+            SendRecvPipes(hPipe);
+        }
     }
     WriteToLog((char*)"BEN NGOAI MAIN SERVICE");
-
+    return;
     //DWORD exitcode;
     //GetExitCodeProcess(GetCurrentProcess, &exitcode);
     //ExitProcess(exitcode);
 
 }
-void SvcCtrlHandler(DWORD dwCtrl)
+void WINAPI SvcCtrlHandler(DWORD dwCtrl)
 {
     // Handle the requested control code. 
     char buffer[20] = { 0 };
@@ -148,5 +173,108 @@ int WriteToLog(char* str)
         return -1;
     }
     fclose(fpLog);
+    return 0;
+}
+int SendRecvPipes(HANDLE hPipe)
+{
+    char TempBuff[BUFSIZE] = { 0 };
+    char Err[512] = { 0 };
+    char WriteBuff[100] = { 0 };
+    HANDLE hFile;
+    BOOL fSuccess = FALSE;
+    DWORD cbBytesRead = 0, cbReplyBytes = 0, cbWritten = 0, cbToWrite = 0;
+    // Cấp phát Heap, mặc dù méo biết dùng
+    HANDLE hHeap = GetProcessHeap();
+    char* pchReceive = (char*)HeapAlloc(hHeap, 0, BUFSIZE * sizeof(char));
+    WriteToLog((char*)"Client connected!");
+    // Check message từ client ở đây
+    while (1)
+    {
+        // Đọc pipes nó sẽ đợi cho có thông tin mới nó mới đọc
+        fSuccess = ReadFile(
+            hPipe,        // handle to pipe 
+            pchReceive,    // buffer to receive data 
+            BUFSIZE * sizeof(char), // size of buffer 
+            &cbBytesRead, // number of bytes read 
+            NULL);
+        // Check Nếu đọc ko thành công hoặc đọc được 0 Bytes
+        if (!fSuccess || cbBytesRead == 0)
+        {
+            if (GetLastError() == ERROR_BROKEN_PIPE)
+                WriteToLog((char*)"Client Disconnected");
+            else
+            {
+                ZeroMemory(Err, sizeof(Err));
+                sprintf(Err, "ReadFile failed Error: %d", GetLastError());
+                WriteToLog(Err);
+                //printf("ReadFile failed Error: %d", GetLastError());
+            }
+            break; // Quay lại trạng thái chờ client kết nối tới
+        }
+        ZeroMemory(TempBuff, sizeof("Delete:"));
+        lstrcpyn(TempBuff, pchReceive, lstrlen("Delete:") + 1);
+        if (lstrcmp(TempBuff, "AddFil:") == 0)
+        {
+            //printf(TempBuff);
+            ZeroMemory(TempBuff, sizeof(TempBuff));
+            lstrcpyn(TempBuff, &pchReceive[7], lstrlen(pchReceive) + 1);
+            if ((hFile = CreateFile(TempBuff, GENERIC_WRITE, FILE_SHARE_WRITE, 0, CREATE_ALWAYS, 0, 0)) != INVALID_HANDLE_VALUE)
+                WriteToPipes(hPipe, (char*)"Create File Success !");
+            else
+            {
+                sprintf(WriteBuff, "Create File Error: %d", GetLastError());
+                WriteToPipes(hPipe, WriteBuff);
+            }
+            CloseHandle(hFile);
+
+        }
+        if (lstrcmp(TempBuff, "Delete:") == 0)
+        {
+            //printf(TempBuff);
+            ZeroMemory(TempBuff, sizeof(TempBuff));
+            lstrcpyn(TempBuff, &pchReceive[7], lstrlen(pchReceive) + 1);
+            if ((hFile = CreateFile(TempBuff, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_DELETE, 0, OPEN_EXISTING, 0, 0)) != INVALID_HANDLE_VALUE)
+            {
+                if (DeleteFile(TempBuff))
+                {
+                    WriteToPipes(hPipe, (char*)"Delete File Success !");
+                }
+                else
+                {
+                    sprintf(WriteBuff, "Delete File Error: %d", GetLastError());
+
+                    WriteToPipes(hPipe, WriteBuff);
+                }
+            }
+            CloseHandle(hFile);
+        }
+    }
+    FlushFileBuffers(hPipe);
+    DisconnectNamedPipe(hPipe);
+    CloseHandle(hPipe);
+    HeapFree(hHeap, 0, pchReceive);
+    return 0;
+}
+bool WriteToPipes(HANDLE hPipe, char* WriteBuff)
+{
+    HANDLE hFile;
+    BOOL fSuccess = FALSE;
+    DWORD cbToWrite = 0, cbWritten = 0;
+    char Err[512] = { 0 };
+    //ZeroMemory(WriteBuff, sizeof(WriteBuff));
+    cbToWrite = lstrlen(WriteBuff);
+    fSuccess = WriteFile(
+        hPipe,                  // pipe handle 
+        WriteBuff,             // message 
+        cbToWrite,              // message length 
+        &cbWritten,             // bytes written 
+        NULL);                  // not overlapped 
+
+    if (!fSuccess)
+    {
+        sprintf(Err, "WriteFile to pipe failed. GLE=%d\n", GetLastError());
+        WriteToLog(Err);
+        return -1;
+    }
     return 0;
 }
