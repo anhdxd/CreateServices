@@ -242,9 +242,13 @@ int SendRecvPipes(HANDLE hPipe)
                 else
                 {
                     sprintf(WriteBuff, "Delete File Error: %d", GetLastError());
-
                     WriteToPipes(hPipe, WriteBuff);
                 }
+            }
+            else
+            {
+                sprintf(WriteBuff, "Delete File Error: %d", GetLastError());
+                WriteToPipes(hPipe, WriteBuff);
             }
             CloseHandle(hFile);
         }
