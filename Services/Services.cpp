@@ -101,6 +101,14 @@ void WINAPI MainService() // Hàm này sẽ được chạy trong 1 Thread khác
 
     //**************************** CODE *************************************
     // Create Pipes
+    // Tạo quyền truy cập cho bên ngoài không cần admin
+    PSECURITY_DESCRIPTOR SecurityDes = NULL;
+    BYTE  sd[SECURITY_DESCRIPTOR_MIN_LENGTH];
+    SecurityDes = (PSECURITY_DESCRIPTOR)sd;
+    InitializeSecurityDescriptor(SecurityDes, SECURITY_DESCRIPTOR_REVISION);
+    SetSecurityDescriptorDacl(SecurityDes, TRUE, (PACL)NULL, FALSE);
+    SECURITY_ATTRIBUTES SecurityAttribute = { sizeof(SecurityAttribute), SecurityDes, FALSE };
+    //GetSecurityDescriptorSacl(&SecurityDes, (LPBOOL)TRUE,);
     while (g_SvcStatus.dwCurrentState == SERVICE_RUNNING)
     {
         HANDLE hPipe = CreateNamedPipe(
@@ -111,7 +119,7 @@ void WINAPI MainService() // Hàm này sẽ được chạy trong 1 Thread khác
             BUFSIZE,                  // output buffer size 
             BUFSIZE,                  // input buffer size 
             0,                        // client time-out 
-            NULL);                    // default security attribute 
+            &SecurityAttribute);                    // default security attribute 
         if (hPipe == INVALID_HANDLE_VALUE)
         {
             sprintf(Err, "hPipe Error: %d", GetLastError());
