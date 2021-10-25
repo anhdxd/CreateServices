@@ -5,7 +5,7 @@
 
 
 #define SVCNAME "AbSvcAnhdz"
-#define LOGFILE "C:\\Users\\Vanh\\Desktop\\TestService\\memstatus.log"
+#define LOGFILE ".\\memstatus.log"
 #define NAMEPIPES "\\\\.\\pipe\\testpipesVA"
 #define BUFSIZE 512
 
@@ -35,7 +35,7 @@ int main()
     //StartServiceCtrlDispatcher(ServicesTable); // Buộc phải có tối thiểu 2 table, kết thúc = service null
     if (!StartServiceCtrlDispatcher(ServicesTable))
     {
-        int result = WriteToLog((char*)"Deo gi y dcm");
+        int result = WriteToLog((char*)"StartServiceCtrlDispatcher = 0");
     }
 }
 
@@ -54,6 +54,7 @@ void InstallSvc()
     if (NULL == schSCManager)
     {
         printf("OpenSCManager failed (%d)\n", GetLastError());
+        //WriteToLog((char*)"OpenSCManager Failed");
         //CloseServiceHandle(schSCManager);
         return;
     }
@@ -65,12 +66,13 @@ void InstallSvc()
         PathExeServices, 0, 0, 0, 0, 0);
     if (schService == NULL)
     {
+        //WriteToLog((char*)"Install Failed");
         printf("CreateService failed (%d)\n", GetLastError());
         CloseServiceHandle(schSCManager);
         //CloseServiceHandle(schService);
         return;
     }
-    else printf("Service installed successfully\n");
+    else printf("Install Successfuly");
 
     CloseServiceHandle(schSCManager);
     CloseServiceHandle(schService);
