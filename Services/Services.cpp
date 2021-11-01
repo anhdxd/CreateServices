@@ -13,7 +13,7 @@ void InstallSvc(); // Cài Services
 void WINAPI MainService(); // Hàm services chính
 int WriteToLog(char* str);
 void WINAPI SvcCtrlHandler(DWORD dwCtrl); // Hàm xử lý request do control dispath gửi về từ SCM
-bool WriteToPipes(HANDLE hPipe, char* WriteBuff);
+int WriteToPipes(HANDLE hPipe, char* WriteBuff);
 int SendRecvPipes(HANDLE hPipe);
 
 HANDLE ghSvcStopEvent;
@@ -269,7 +269,7 @@ int SendRecvPipes(HANDLE hPipe)
     HeapFree(hHeap, 0, pchReceive);
     return 0;
 }
-bool WriteToPipes(HANDLE hPipe, char* WriteBuff)
+int WriteToPipes(HANDLE hPipe, char* WriteBuff)
 {
     HANDLE hFile;
     BOOL fSuccess = FALSE;
