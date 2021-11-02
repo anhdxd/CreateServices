@@ -20,7 +20,6 @@ HANDLE ghSvcStopEvent;
 SERVICE_STATUS g_SvcStatus;
 SERVICE_STATUS_HANDLE g_hSvcStatus;
 
-
 int main()
 {
     SERVICE_TABLE_ENTRY ServicesTable[2]; // Bảng này lưu các service định nghĩa trong ct
@@ -89,7 +88,7 @@ void WINAPI MainService() // Hàm này sẽ được chạy trong 1 Thread khác
         FALSE,   // not signaled
         NULL);   // no name
     // đăng kí hàm CtrlHandler() xử lý  các request do “control dispatcher” gửi về từ SCM. Hàm RegisterServiceCtrlHandler trả về status handle.
-    SERVICE_STATUS_HANDLE hSvcStatus = RegisterServiceCtrlHandler(SVCNAME, (LPHANDLER_FUNCTION)SvcCtrlHandler);
+    g_hSvcStatus = RegisterServiceCtrlHandler(SVCNAME, (LPHANDLER_FUNCTION)SvcCtrlHandler);
     g_SvcStatus.dwServiceType = SERVICE_WIN32;
     g_SvcStatus.dwCurrentState = SERVICE_START_PENDING;
     g_SvcStatus.dwControlsAccepted = SERVICE_ACCEPT_STOP | SERVICE_ACCEPT_SHUTDOWN;
@@ -99,7 +98,7 @@ void WINAPI MainService() // Hàm này sẽ được chạy trong 1 Thread khác
     g_SvcStatus.dwWaitHint = 0;
     // Chuyen thanh Running
     g_SvcStatus.dwCurrentState = SERVICE_RUNNING;
-    SetServiceStatus(hSvcStatus, &g_SvcStatus);
+    SetServiceStatus(g_hSvcStatus, &g_SvcStatus);
 
     //**************************** CODE *************************************
     // Create Pipes
